@@ -30,9 +30,9 @@ class LineFollower:
         self.steering = 0.0 # from -1 to 1
         self.throttle = 0.15 # from -1 to 1
         self.recording = False # Set to true if desired to save camera frames
-        self.delta_th = 0.01 # how much to change throttle when off
-        self.throttle_max = 0.15
-        self.throttle_min = 0.075
+        self.delta_th = 0.005 # how much to change throttle when off
+        self.throttle_max = 0.25
+        self.throttle_min = 0.125
         self.pid_st = PID(Kp=-0.01, Ki=0.0001, Kd=-0.002)
         #self.pid_st = PID(Kp=-.3, Ki=0.01, Kd=-0.2)
         self.horz_scan_x = 150
@@ -92,7 +92,7 @@ class LineFollower:
             self.steering = self.pid_st(max_yellow)
 
             # slow down linearly when away from ideal, and speed up when close
-            if abs(max_yellow - self.target_pixel) > 50:
+            if abs(max_yellow - self.target_pixel) > 100:
                 if self.throttle > self.throttle_min:
                     self.throttle -= self.delta_th
             else:

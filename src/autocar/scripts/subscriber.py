@@ -85,7 +85,7 @@ class PWMThrottle:
     Wrapper over a PWM motor controller to convert -1 to 1 throttle
     values to PWM pulses.
     """
-    MIN_THROTTLE = 0.075
+    MIN_THROTTLE = -1
     MAX_THROTTLE = 1
 
     def __init__(self, controller=None, max_pulse=300,min_pulse=490, zero_pulse=350):
@@ -113,7 +113,7 @@ class PWMThrottle:
 
     def run(self, throttle):
         if throttle > 0:
-            self.pulse = map_range(throttle, self.MIN_THROTTLE, self.MAX_THROTTLE, self.zero_pulse, self.max_pulse)
+            self.pulse = map_range(throttle, 0, self.MAX_THROTTLE, self.zero_pulse, self.max_pulse)
         else:
             self.pulse = map_range(throttle, self.MIN_THROTTLE, 0, self.min_pulse, self.zero_pulse)
         print("throttle: " + str(self.pulse))
@@ -125,12 +125,12 @@ class PWMThrottle:
         self.running = False
 
 class Config():
-    def __init__(self, STEERING_CHANNEL = 1,
+    def __init__(self, STEERING_CHANNEL = 4,
                        PCA9685_I2C_ADDR = 0x40, 
                        PCA9685_I2C_BUSNUM = 1, 
                        STEERING_LEFT_PWM = 490, 
                        STEERING_RIGHT_PWM = 270, 
-                       THROTTLE_CHANNEL = 2, 
+                       THROTTLE_CHANNEL = 5, 
                        THROTTLE_FORWARD_PWM = 490,#cut all in half from orig values 
                        THROTTLE_STOPPED_PWM = 360, 
                        THROTTLE_REVERSE_PWM = 280):
@@ -154,11 +154,9 @@ throttle = PWMThrottle(controller=throttle_controller, max_pulse=cfg.THROTTLE_FO
 
 
 def throttle_callback(data):
-    print("throttle: " +str(data.data))
     throttle.run(float(data.data))
 
 def steering_callback(data):
-    print("steering: " + str(data.data))
     steering.run(float(data.data))
 
 
