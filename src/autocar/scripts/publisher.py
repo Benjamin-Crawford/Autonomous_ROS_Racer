@@ -23,20 +23,20 @@ class LineFollower:
     '''
     def __init__(self):
         self.vert_scan_y = 300   # num pixels from the top to start horiz scan
-        self.vert_scan_height = 30 # num pixels high to grab from horiz scan
+        self.vert_scan_height = 150 # num pixels high to grab from horiz scan
         self.color_thr_low = np.asarray((15, 50, 50)) # hsv dark yellow
         self.color_thr_hi = np.asarray((30, 255, 255)) # hsv light yellow
         self.target_pixel = None # of the N slots above, which is the ideal relationship target
         self.steering = 0.0 # from -1 to 1
-        self.throttle = 0.125 # from -1 to 1
+        self.throttle = 0.04 # from -1 to 1
         self.recording = False # Set to true if desired to save camera frames
-        self.delta_th = 0.00275 # how much to change throttle when off
-        self.throttle_max = 0.15
-        self.throttle_min = 0.075
-        self.pid_st = PID(Kp=-0.0025, Ki=0.000033, Kd=-0.00066)
+        self.delta_th = 0.0025 # how much to change throttle when off
+        self.throttle_max = 0.06
+        self.throttle_min = 0.06
+        self.pid_st = PID(Kp=-0.0027, Ki=0.00008, Kd=-0.00015)
         #self.pid_st = PID(Kp=-.3, Ki=0.01, Kd=-0.2)
-        self.horz_scan_x = 150
-        self.horz_scan_width = 350
+        self.horz_scan_x = 125
+        self.horz_scan_width = 500
         self.cam = cv2.VideoCapture(0)
 
 
@@ -61,11 +61,10 @@ class LineFollower:
 
         # make a mask of the colors in our range we are looking for
         mask = cv2.inRange(img_hsv, self.color_thr_low, self.color_thr_hi)
-
         # which index of the range has the highest amount of yellow?
         hist = np.sum(mask, axis=0)
         max_yellow = np.argmax(hist)
-        print("max_yellow: " + str(max_yellow))
+        print("max_yellow: " + str(hist[max_yellow])+"/500")
         return max_yellow, hist[max_yellow], mask, cam_img
 
 
@@ -75,8 +74,8 @@ class LineFollower:
         input: cam_image, an RGB numpy array
         output: steering, throttle, and recording flag
         '''
-        max_yellow, confidense, mask, cam_img = self.get_i_color()
-        conf_thresh = 0.001
+        max_yellow, confidence, mask, cam_img = self.get_i_color()
+        conf_thresh = 300
 
         if self.target_pixel is None:
             # Use the first run of get_i_color to set our relationship with the yellow line.
@@ -86,13 +85,13 @@ class LineFollower:
             # this is the target of our steering PID controller
             self.pid_st.setpoint = self.target_pixel
 
-        elif confidense > conf_thresh:
+        elif confidence > conf_thresh:
             # invoke the controller with the current yellow line position
             # get the new steering value as it chases the ideal
             self.steering = self.pid_st(max_yellow)
 
             # slow down linearly when away from ideal, and speed up when close
-            if abs(max_yellow - self.target_pixel) > 100:
+            if abs(max_yellow - self.target_pixel) > 50:
                 if self.throttle > self.throttle_min:
                     self.throttle -= self.delta_th
             else:
@@ -142,7 +141,7 @@ def pub():
     steer_pub = rospy.Publisher('steering', Float64, queue_size=10)
     throttle_pub = rospy.Publisher('throttle', Float64, queue_size = 10)
     rospy.init_node('pub', anonymous=True)
-    rate = rospy.Rate(20) # 20hz
+    rate = rospy.Rate(30) # 20hz
     follower = LineFollower()
     while not rospy.is_shutdown():
         steering, throttle, recording = follower.run()

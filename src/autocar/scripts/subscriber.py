@@ -128,8 +128,8 @@ class Config():
     def __init__(self, STEERING_CHANNEL = 4,
                        PCA9685_I2C_ADDR = 0x40, 
                        PCA9685_I2C_BUSNUM = 1, 
-                       STEERING_LEFT_PWM = 490, 
-                       STEERING_RIGHT_PWM = 270, 
+                       STEERING_LEFT_PWM = 270, 
+                       STEERING_RIGHT_PWM = 490, 
                        THROTTLE_CHANNEL = 5, 
                        THROTTLE_FORWARD_PWM = 490,#cut all in half from orig values 
                        THROTTLE_STOPPED_PWM = 360, 
