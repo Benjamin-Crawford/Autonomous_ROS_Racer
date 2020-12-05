@@ -1,0 +1,8 @@
+prefix=/home/jetson/projects/d3/Autonomous_ROS_Racer/devel
+
+Name: autocar
+Description: Description of autocar
+Version: 0.0.0
+Cflags: -I/home/jetson/projects/d3/Autonomous_ROS_Racer/devel/include
+Libs: -L${prefix}/lib 
+Requires: rospy message_runtime
