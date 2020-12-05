@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import time
 import rospy
 from std_msgs.msg import Float64
@@ -68,6 +70,7 @@ class PWMSteering:
 
     def run(self, angle):
         self.pulse = map_range(angle, self.LEFT_ANGLE, self.RIGHT_ANGLE, self.left_pulse, self.right_pulse)
+        print("steering: " + str(self.pulse))
         self.controller.set_pulse(self.pulse)
 
     def shutdown(self):
@@ -82,7 +85,7 @@ class PWMThrottle:
     Wrapper over a PWM motor controller to convert -1 to 1 throttle
     values to PWM pulses.
     """
-    MIN_THROTTLE = -1
+    MIN_THROTTLE = 0.075
     MAX_THROTTLE = 1
 
     def __init__(self, controller=None, max_pulse=300,min_pulse=490, zero_pulse=350):
@@ -110,9 +113,10 @@ class PWMThrottle:
 
     def run(self, throttle):
         if throttle > 0:
-            self.pulse = map_range(throttle, 0, self.MAX_THROTTLE, self.zero_pulse, self.max_pulse)
+            self.pulse = map_range(throttle, self.MIN_THROTTLE, self.MAX_THROTTLE, self.zero_pulse, self.max_pulse)
         else:
             self.pulse = map_range(throttle, self.MIN_THROTTLE, 0, self.min_pulse, self.zero_pulse)
+        print("throttle: " + str(self.pulse))
         self.controller.set_pulse(self.pulse)
 
     def shutdown(self):
@@ -127,7 +131,7 @@ class Config():
                        STEERING_LEFT_PWM = 490, 
                        STEERING_RIGHT_PWM = 270, 
                        THROTTLE_CHANNEL = 2, 
-                       THROTTLE_FORWARD_PWM = 490, 
+                       THROTTLE_FORWARD_PWM = 490,#cut all in half from orig values 
                        THROTTLE_STOPPED_PWM = 360, 
                        THROTTLE_REVERSE_PWM = 280):
         self.STEERING_CHANNEL  = STEERING_CHANNEL
@@ -150,17 +154,19 @@ throttle = PWMThrottle(controller=throttle_controller, max_pulse=cfg.THROTTLE_FO
 
 
 def throttle_callback(data):
-    throttle.run(data)
+    print("throttle: " +str(data.data))
+    throttle.run(float(data.data))
 
 def steering_callback(data):
-    steering.run(data)
+    print("steering: " + str(data.data))
+    steering.run(float(data.data))
 
 
 def listener():
     rospy.init_node('listener', anonymous=True)
 
-    rospy.Subscriber('steering', Float64, throttle_callback)
-    rospy.Subscriber('throttle', Float64, steering_callback)
+    rospy.Subscriber('steering', Float64, steering_callback)
+    rospy.Subscriber('throttle', Float64, throttle_callback)
 
     rospy.spin()
 

@@ -10,7 +10,7 @@ from docopt import docopt
 import numpy as np
 import cv2
 from simple_pid import PID
-import roslibpy
+
 
 class LineFollower:
     '''
@@ -22,25 +22,27 @@ class LineFollower:
     in the image.
     '''
     def __init__(self):
-        self.vert_scan_y = 60   # num pixels from the top to start horiz scan
-        self.vert_scan_height = 10 # num pixels high to grab from horiz scan
-        self.color_thr_low = np.asarray((0, 50, 50)) # hsv dark yellow
-        self.color_thr_hi = np.asarray((50, 255, 255)) # hsv light yellow
+        self.vert_scan_y = 300   # num pixels from the top to start horiz scan
+        self.vert_scan_height = 40 # num pixels high to grab from horiz scan
+        self.color_thr_low = np.asarray((15, 50, 50)) # hsv dark yellow
+        self.color_thr_hi = np.asarray((30, 255, 255)) # hsv light yellow
         self.target_pixel = None # of the N slots above, which is the ideal relationship target
         self.steering = 0.0 # from -1 to 1
         self.throttle = 0.15 # from -1 to 1
         self.recording = False # Set to true if desired to save camera frames
-        self.delta_th = 0.1 # how much to change throttle when off
-        self.throttle_max = 0.3
-        self.throttle_min = 0.15
-        self.pid_st = PID(Kp=-0.03, Ki=0.0001, Kd=-0.002)
-        self.horz_scan_x = 30
-        self.horz_scan_width = 60
+        self.delta_th = 0.01 # how much to change throttle when off
+        self.throttle_max = 0.15
+        self.throttle_min = 0.075
+        self.pid_st = PID(Kp=-0.01, Ki=0.0001, Kd=-0.002)
+        #self.pid_st = PID(Kp=-.3, Ki=0.01, Kd=-0.2)
+        self.horz_scan_x = 150
+        self.horz_scan_width = 350
         self.cam = cv2.VideoCapture(0)
 
 
     def take_img(self):
         return_value, cam_img = self.cam.read()
+        cam_img = cv2.cvtColor(cam_img,cv2.COLOR_RGB2BGR)
         return cam_img
 
     def get_i_color(self):
@@ -90,7 +92,7 @@ class LineFollower:
             self.steering = self.pid_st(max_yellow)
 
             # slow down linearly when away from ideal, and speed up when close
-            if abs(max_yellow - self.target_pixel) > 10:
+            if abs(max_yellow - self.target_pixel) > 50:
                 if self.throttle > self.throttle_min:
                     self.throttle -= self.delta_th
             else:
@@ -99,8 +101,9 @@ class LineFollower:
 
 
         # show some diagnostics
-        self.debug_display(cam_img, mask, max_yellow, confidense)
-
+        #self.debug_display(cam_img, mask, max_yellow, confidense)
+        print("steering: "+ str(self.steering))
+        print("throttle: " + str(self.throttle))
         return self.steering, self.throttle, self.recording
 
 

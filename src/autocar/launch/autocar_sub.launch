@@ -1,7 +1,7 @@
 <launch>
 
   <node pkg ="autocar"
-        type="subcriber.py"
+        type="subscriber.py"
         name="listener"
         output="screen">
   </node>
