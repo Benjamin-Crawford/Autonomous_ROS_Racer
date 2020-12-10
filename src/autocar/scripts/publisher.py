@@ -10,7 +10,11 @@ from docopt import docopt
 import numpy as np
 import cv2
 from simple_pid import PID
+<<<<<<< Updated upstream:src/autocar/scripts/publisher.py
 
+=======
+from __future__ import division
+>>>>>>> Stashed changes:publisher.py
 
 class LineFollower:
     '''
@@ -23,6 +27,7 @@ class LineFollower:
     '''
     def __init__(self):
         self.vert_scan_y = 300   # num pixels from the top to start horiz scan
+<<<<<<< Updated upstream:src/autocar/scripts/publisher.py
         self.vert_scan_height = 150 # num pixels high to grab from horiz scan
         self.color_thr_low = np.asarray((15, 50, 50)) # hsv dark yellow
         self.color_thr_hi = np.asarray((30, 255, 255)) # hsv light yellow
@@ -30,6 +35,18 @@ class LineFollower:
         self.steering = 0.0 # from -1 to 1
         self.throttle = 0.04 # from -1 to 1
         self.recording = False # Set to true if desired to save camera frames
+=======
+        self.vert_scan_height = 30 # num pixels high to grab from horiz scan
+        
+        self.lower_yellow = np.asarray((15, 50, 50)) # hsv dark yellow
+        self.lower_white = np.array([0,0,230], dtype=np.uint8)
+        self.upper_white = np.array([255,20,255], dtype=np.uint8)
+        self.upper_white = np.array([131, 255, 255]) #hsv bright white
+        
+        self.target_pixel = None # of the N slots above, which is the ideal relationship target
+        self.steering = 0.0 # from -1 to 1
+        self.throttle = 0.06 # from -1 to 1
+>>>>>>> Stashed changes:publisher.py
         self.delta_th = 0.0025 # how much to change throttle when off
         self.throttle_max = 0.06
         self.throttle_min = 0.06
@@ -45,6 +62,16 @@ class LineFollower:
         cam_img = cv2.cvtColor(cam_img,cv2.COLOR_RGB2BGR)
         return cam_img
 
+    def take_avg_img(self,num_imgs):
+        sum_img = self.take_img() #always take at least one image
+
+        #for the rest of the images take them one at a time and add up
+        for i in range(num_imgs - 1):
+            sum_img = sum_img + self.take_img()
+        
+        return (sum_img / num_imgs)
+
+
     def get_i_color(self):
         '''
         get the horizontal index of the color at the given slice of the image
@@ -59,13 +86,50 @@ class LineFollower:
         # convert to HSV color space
         img_hsv = cv2.cvtColor(scan_line, cv2.COLOR_RGB2HSV)
 
+
         # make a mask of the colors in our range we are looking for
-        mask = cv2.inRange(img_hsv, self.color_thr_low, self.color_thr_hi)
-        # which index of the range has the highest amount of yellow?
+        yellow_mask = cv2.inRange(img_hsv, self.lower_yellow, self.upper_yellow)
+        white_mask = cv2.inRange(img_hsv, self.lower_white, self.upper_white)
+
+        yellow_mask = self.remove_noise(yellow_mask)
+        white_mask = self.remove_noise(white_mask)
+
+        yellow_centroid_x = self.find_centroids(yellow_mask)
+        white_centroid_x = self.find_centroids(white_mask)
+
+        return yellow_centroid_x, white_centroid_x
+
+    def remove_noise(self, mask):
+        # Remove noise
+        kernel_erode = np.ones((4,4), np.uint8)
+        eroded_mask = cv2.erode(mask, kernel_erode, iterations=1)
+        kernel_dilate = np.ones((6,6),np.uint8)
+        dilated_mask = cv2.dilate(eroded_mask, kernel_dilate, iterations=1)
+        return dilated_mask
+
+    def find_centroids(self, mask):
+        # Find the different contours
+        contours, hiearchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        # Sort by area (keep only the biggest one)
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:1]
+
         hist = np.sum(mask, axis=0)
-        max_yellow = np.argmax(hist)
-        print("max_yellow: " + str(hist[max_yellow])+"/500")
-        return max_yellow, hist[max_yellow], mask, cam_img
+        mask_max = np.argmax(hist)
+
+        if len(contours) > 0:
+            M = cv2.moments(contours[0])
+            # Centroid
+            if int(abs(M['m00'])) > 0:
+                cx = int(M['m10']/M['m00'])
+                cy = int(M['m01']/M['m00'])
+                print("Centroid of the biggest area: ({}, {})".format(cx, cy))
+                return int(((cx + mask_max) / 2)//1)
+            else:
+                print("No Centroid Found")
+                return mask_max
+        else:
+            print("No Centroid Found")
+            return mask_max
 
 
     def run(self):
@@ -74,68 +138,62 @@ class LineFollower:
         input: cam_image, an RGB numpy array
         output: steering, throttle, and recording flag
         '''
-        max_yellow, confidence, mask, cam_img = self.get_i_color()
-        conf_thresh = 300
-
-        if self.target_pixel is None:
+        yellow_centroid_x, white_centroid_x = self.get_i_color()
+        white_centroid_x = -1
+        if self.target_pixel is None and yellow_centroid_x > 0:
             # Use the first run of get_i_color to set our relationship with the yellow line.
             # You could optionally init the target_pixel with the desired value.
-            self.target_pixel = max_yellow
+            self.target_pixel = yellow_centroid_x
+
+            # this is the target of our steering PID controller
+            self.pid_st.setpoint = self.target_pixel 
+
+        elif self.target_pixel is None and white_centroid_x > 0:
+            # Use the first run of get_i_color to set our relationship with the yellow line.
+            # You could optionally init the target_pixel with the desired value.
+            self.target_pixel = white_centroid_x
 
             # this is the target of our steering PID controller
             self.pid_st.setpoint = self.target_pixel
 
-        elif confidence > conf_thresh:
-            # invoke the controller with the current yellow line position
-            # get the new steering value as it chases the ideal
-            self.steering = self.pid_st(max_yellow)
+        #First if there is a yellow and a white centroid then we want to be in the middle of them
+        elif yellow_centroid_x > 0 and white_centroid_x > 0:
+            self.steering = self.pid_st((yellow_centroid_x + white_centroid_x)/2)
 
             # slow down linearly when away from ideal, and speed up when close
-            if abs(max_yellow - self.target_pixel) > 50:
+            if abs(yellow_centroid_x - self.target_pixel) > 50:
                 if self.throttle > self.throttle_min:
                     self.throttle -= self.delta_th
             else:
                 if self.throttle < self.throttle_max:
                     self.throttle += self.delta_th
 
+        #second if there is only a yellow centroid then we want to go to it
+        elif yellow_centroid_x > 0 and white_centroid_x < 0:
+            self.steering = self.pid_st(yellow_centroid_x)
+            # slow down linearly when away from ideal, and speed up when close
+            if abs(yellow_centroid_x - self.target_pixel) > 50:
+                if self.throttle > self.throttle_min:
+                    self.throttle -= self.delta_th
+            else:
+                if self.throttle < self.throttle_max:
+                    self.throttle += self.delta_th
+
+        #third if there is only a white centroid follow it
+        elif white_centroid_x > 0 and yellow_centroid_x < 0:
+            self.steering = self.pid_st(white_centroid_x)
+            # slow down linearly when away from ideal, and speed up when close
+            if abs(white_centroid_x - self.target_pixel) > 50:
+                if self.throttle > self.throttle_min:
+                    self.throttle -= self.delta_th
+            else:
+                if self.throttle < self.throttle_max:
+                    self.throttle += self.delta_th
 
         # show some diagnostics
-        #self.debug_display(cam_img, mask, max_yellow, confidense)
         print("steering: "+ str(self.steering))
         print("throttle: " + str(self.throttle))
-        return self.steering, self.throttle, self.recording
-
-
-    def debug_display(self, cam_img, mask, max_yellow, confidense):
-        '''
-        composite mask on top the original image.
-        show some values we are using for control
-        '''
-
-        mask_exp = np.stack((mask,)*3, axis=-1)
-        iSlice = self.vert_scan_y
-        img = np.copy(cam_img)
-        img[iSlice : iSlice + self.vert_scan_height, self.horz_scan_x : self.horz_scan_x + self.horz_scan_width, :] = mask_exp
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-
-        display_str = []
-        display_str.append("STEERING:{:.1f}".format(self.steering))
-        display_str.append("THROTTLE:{:.2f}".format(self.throttle))
-        display_str.append("I YELLOW:{:d}".format(max_yellow))
-        display_str.append("CONF:{:.2f}".format(confidense))
-
-        y = 10
-        x = 10
-
-        for s in display_str:
-            cv2.putText(img, s, color=(0,255,255), org=(x,y), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.4)
-            y += 10
-
-        cv2.namedWindow('image', cv2.WINDOW_NORMAL)
-        cv2.imshow("image", img)
-        cv2.resizeWindow('image', 300,300)
-        cv2.waitKey(1)
-
+        return self.steering, self.throttle
 
 def pub():
     steer_pub = rospy.Publisher('steering', Float64, queue_size=10)
@@ -144,13 +202,17 @@ def pub():
     rate = rospy.Rate(30) # 20hz
     follower = LineFollower()
     while not rospy.is_shutdown():
-        steering, throttle, recording = follower.run()
+        steering, throttle = follower.run()
         rospy.loginfo(steering)
         rospy.loginfo(throttle)
 
         throttle_pub.publish(throttle)
         steer_pub.publish(steering)
         rate.sleep()
+
+    #on shutdown stop car and straighten wheels
+    throttle_pub.publish(0)
+    steer_pub.publish(0)
 
 if __name__ == '__main__':
     try:
