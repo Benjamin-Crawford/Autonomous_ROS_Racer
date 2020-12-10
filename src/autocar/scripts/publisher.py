@@ -10,11 +10,7 @@ from docopt import docopt
 import numpy as np
 import cv2
 from simple_pid import PID
-<<<<<<< Updated upstream:src/autocar/scripts/publisher.py
-
-=======
 from __future__ import division
->>>>>>> Stashed changes:publisher.py
 
 class LineFollower:
     '''
@@ -27,15 +23,6 @@ class LineFollower:
     '''
     def __init__(self):
         self.vert_scan_y = 300   # num pixels from the top to start horiz scan
-<<<<<<< Updated upstream:src/autocar/scripts/publisher.py
-        self.vert_scan_height = 150 # num pixels high to grab from horiz scan
-        self.color_thr_low = np.asarray((15, 50, 50)) # hsv dark yellow
-        self.color_thr_hi = np.asarray((30, 255, 255)) # hsv light yellow
-        self.target_pixel = None # of the N slots above, which is the ideal relationship target
-        self.steering = 0.0 # from -1 to 1
-        self.throttle = 0.04 # from -1 to 1
-        self.recording = False # Set to true if desired to save camera frames
-=======
         self.vert_scan_height = 30 # num pixels high to grab from horiz scan
         
         self.lower_yellow = np.asarray((15, 50, 50)) # hsv dark yellow
@@ -46,7 +33,6 @@ class LineFollower:
         self.target_pixel = None # of the N slots above, which is the ideal relationship target
         self.steering = 0.0 # from -1 to 1
         self.throttle = 0.06 # from -1 to 1
->>>>>>> Stashed changes:publisher.py
         self.delta_th = 0.0025 # how much to change throttle when off
         self.throttle_max = 0.06
         self.throttle_min = 0.06
