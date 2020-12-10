@@ -26,9 +26,11 @@ class LineFollower:
         self.vert_scan_height = 30 # num pixels high to grab from horiz scan
         
         self.lower_yellow = np.asarray((15, 50, 50)) # hsv dark yellow
+        self.upper_yellow = np.asarray((30, 255, 255)) # hsv dark yellow
         self.lower_white = np.array([0,0,230], dtype=np.uint8)
         self.upper_white = np.array([255,20,255], dtype=np.uint8)
-        self.upper_white = np.array([131, 255, 255]) #hsv bright white
+        self.lower_orange = np.array([5,50,50])
+        self.upper_orange = np.array([15,255,255])
         
         self.target_pixel = None # of the N slots above, which is the ideal relationship target
         self.steering = 0.0 # from -1 to 1
@@ -38,8 +40,8 @@ class LineFollower:
         self.throttle_min = 0.06
         self.pid_st = PID(Kp=-0.0027, Ki=0.00008, Kd=-0.00015)
         #self.pid_st = PID(Kp=-.3, Ki=0.01, Kd=-0.2)
-        self.horz_scan_x = 125
-        self.horz_scan_width = 500
+        self.horz_scan_x = 0
+        self.horz_scan_width = 800
         self.cam = cv2.VideoCapture(0)
 
 
@@ -64,7 +66,7 @@ class LineFollower:
         output: index of max color, value of cumulative color at that index, and mask of pixels in range
         '''
         cam_img = self.take_img()
-        cam_img = cam_img.remove_noise()
+        # cam_img = cam_img.remove_noise()
         # take a horizontal slice of the image
         iSlice = self.vert_scan_y
         scan_line = cam_img[iSlice : iSlice + self.vert_scan_height, self.horz_scan_x : self.horz_scan_x + self.horz_scan_width, :]
@@ -76,14 +78,16 @@ class LineFollower:
         # make a mask of the colors in our range we are looking for
         yellow_mask = cv2.inRange(img_hsv, self.lower_yellow, self.upper_yellow)
         white_mask = cv2.inRange(img_hsv, self.lower_white, self.upper_white)
-
+        orange_mask = cv2.inRange(img_hsv, self.lower_orange, self.upper_orange)
         # yellow_mask = self.remove_noise(yellow_mask)
         # white_mask = self.remove_noise(white_mask)
+        orange_mask = self.remove_noise(orange_mask)
 
-        yellow_centroid_x = self.find_centroids(yellow_mask)
-        white_centroid_x = self.find_centroids(white_mask)
 
-        return yellow_centroid_x, white_centroid_x
+        yellow_centroid_x = self.find_centroids_plus_hist(yellow_mask)
+        white_centroid_x = self.find_centroids_plus_hist(white_mask)
+        orange_centroid_x = self.find_centroids(orange_mask)
+        return yellow_centroid_x, white_centroid_x, orange_centroid_x
 
     def remove_noise(self, mask):
         # Remove noise
@@ -93,7 +97,7 @@ class LineFollower:
         dilated_mask = cv2.dilate(eroded_mask, kernel_dilate, iterations=1)
         return dilated_mask
 
-    def find_centroids(self, mask):
+    def find_centroids_plus_hist(self, mask):
         # Find the different contours
         contours, hiearchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         # Sort by area (keep only the biggest one)
@@ -117,6 +121,27 @@ class LineFollower:
             print("No Centroid Found")
             return mask_max
 
+    def find_centroids(self, mask):
+        # Find the different contours
+        contours, hiearchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        # Sort by area (keep only the biggest one)
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:1]
+
+        if len(contours) > 0:
+            M = cv2.moments(contours[0])
+            # Centroid
+            if int(abs(M['m00'])) > 0:
+                cx = int(M['m10']/M['m00'])
+                cy = int(M['m01']/M['m00'])
+                print("Centroid of the biggest area: ({}, {})".format(cx, cy))
+                return int(cx//1)
+            else:
+                print("No Centroid Found")
+                return -1
+        else:
+            print("No Centroid Found")
+            return -1
+
 
     def run(self):
         '''
@@ -124,7 +149,7 @@ class LineFollower:
         input: cam_image, an RGB numpy array
         output: steering, throttle, and recording flag
         '''
-        yellow_centroid_x, white_centroid_x = self.get_i_color()
+        yellow_centroid_x, white_centroid_x, orange_centroid_x = self.get_i_color()
         white_centroid_x = -1
         if self.target_pixel is None and yellow_centroid_x > 0:
             # Use the first run of get_i_color to set our relationship with the yellow line.
@@ -155,8 +180,32 @@ class LineFollower:
                     self.throttle += self.delta_th
 
         #second if there is only a yellow centroid then we want to go to it
-        elif yellow_centroid_x > 0 and white_centroid_x < 0:
+        elif yellow_centroid_x > 0 and white_centroid_x < 0 and orange_centroid_x < 0:
             self.steering = self.pid_st(yellow_centroid_x)
+            # slow down linearly when away from ideal, and speed up when close
+            if abs(yellow_centroid_x - self.target_pixel) > 50:
+                if self.throttle > self.throttle_min:
+                    self.throttle -= self.delta_th
+            else:
+                if self.throttle < self.throttle_max:
+                    self.throttle += self.delta_th
+
+        #second if there is only a yellow centroid then we want to go to it
+        elif yellow_centroid_x > 0 and white_centroid_x < 0 and orange_centroid_x > 0:
+            target = int((yellow_centroid_x + orange_centroid_x) // 2)
+            self.steering = self.pid_st(target)
+            # slow down linearly when away from ideal, and speed up when close
+            if abs(yellow_centroid_x - self.target_pixel) > 50:
+                if self.throttle > self.throttle_min:
+                    self.throttle -= self.delta_th
+            else:
+                if self.throttle < self.throttle_max:
+                    self.throttle += self.delta_th
+
+        #second if there is only a yellow centroid then we want to go to it
+        elif yellow_centroid_x < 0 and white_centroid_x < 0 and orange_centroid_x > 0:
+            target = int(orange_centroid_x + 100)
+            self.steering = self.pid_st(target)
             # slow down linearly when away from ideal, and speed up when close
             if abs(yellow_centroid_x - self.target_pixel) > 50:
                 if self.throttle > self.throttle_min:
