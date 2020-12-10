@@ -49,14 +49,13 @@ class LineFollower:
         return cam_img
 
     def take_avg_img(self,num_imgs):
-        sum_img = self.take_img() #always take at least one image
-
-        #for the rest of the images take them one at a time and add up
+        # Calculate blended image
+        dst = self.take_img()
         for i in range(num_imgs - 1):
-            sum_img = sum_img + self.take_img()
-        
-        return (sum_img / num_imgs)
-
+            alpha = 1.0/(i + 1)
+            beta = 1.0 - alpha
+            dst = cv2.addWeighted(self.take_img(), alpha, dst, beta, 0.0)
+        return dst
 
     def get_i_color(self):
         '''
