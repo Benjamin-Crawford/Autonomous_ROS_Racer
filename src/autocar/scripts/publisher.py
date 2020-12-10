@@ -65,6 +65,7 @@ class LineFollower:
         output: index of max color, value of cumulative color at that index, and mask of pixels in range
         '''
         cam_img = self.take_img()
+        cam_img = cam_img.remove_noise()
         # take a horizontal slice of the image
         iSlice = self.vert_scan_y
         scan_line = cam_img[iSlice : iSlice + self.vert_scan_height, self.horz_scan_x : self.horz_scan_x + self.horz_scan_width, :]
@@ -77,8 +78,8 @@ class LineFollower:
         yellow_mask = cv2.inRange(img_hsv, self.lower_yellow, self.upper_yellow)
         white_mask = cv2.inRange(img_hsv, self.lower_white, self.upper_white)
 
-        yellow_mask = self.remove_noise(yellow_mask)
-        white_mask = self.remove_noise(white_mask)
+        # yellow_mask = self.remove_noise(yellow_mask)
+        # white_mask = self.remove_noise(white_mask)
 
         yellow_centroid_x = self.find_centroids(yellow_mask)
         white_centroid_x = self.find_centroids(white_mask)
